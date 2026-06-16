@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Aseprite</string>
+    <string name="native_init_failed">Native init failed: %1$s</string>
+    <string name="native_load_failed">Native load failed: %1$s</string>
+    <string name="run_cli_smoke">Run --version</string>
+    <string name="status_ready">Ready</string>
+    <string name="status_running">Running</string>
+    <string name="status_gui_started">GUI start: %1$d</string>
+    <string name="status_finished">Exit code: %1$d</string>
+</resources>

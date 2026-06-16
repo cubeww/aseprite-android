@@ -26,6 +26,8 @@ int AppOS_get_name(lua_State* L)
   lua_pushstring(L, "Windows");
 #elif LAF_MACOS
   lua_pushstring(L, "macOS");
+#elif LAF_ANDROID
+  lua_pushstring(L, "Android");
 #elif LAF_LINUX
   lua_pushstring(L, "Linux");
 #else

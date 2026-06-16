@@ -44,7 +44,40 @@
 #include "ui/ui.h"
 #include "undo/undo_state.h"
 
+#include <cstdlib>
+
+#if LAF_ANDROID
+bool aseprite_android_show_save_file_dialog(const std::string& initialName,
+                                            const std::string& defaultExtension,
+                                            std::string& output);
+bool aseprite_android_finish_save_file_dialog(const std::string& localPath,
+                                              bool success,
+                                              bool keepMapping);
+#endif
+
 namespace app {
+
+namespace {
+
+std::string initial_filename_for_file_selector(const std::string& filename)
+{
+#if LAF_ANDROID
+  const char* home = std::getenv("HOME");
+  if (home) {
+    std::string internal = base::fix_path_separators(home);
+    std::string current = base::fix_path_separators(filename);
+    if (!internal.empty() && current.size() >= internal.size() &&
+        current.compare(0, internal.size(), internal) == 0 &&
+        (current.size() == internal.size() || base::is_path_separator(current[internal.size()]))) {
+      return base::join_path(base::get_user_docs_folder(), base::get_file_name(filename));
+    }
+  }
+#endif
+
+  return filename;
+}
+
+} // namespace
 
 class SaveFileJob : public Job,
                     public IFileOpProgress {
@@ -131,10 +164,27 @@ std::string SaveFileBaseCommand::saveAsDialog(Context* context,
   std::string filename = params().filename();
   if (filename.empty() || params().ui()) {
     base::paths exts = get_writable_extensions();
-    filename = initialFilename;
+    filename = initial_filename_for_file_selector(initialFilename);
 
     if (context->isUIAvailable()) {
     again:;
+#if LAF_ANDROID
+      std::string defaultExtension = Preferences::instance().saveFile.defaultExtension();
+      if (defaultExtension.empty() && !exts.empty())
+        defaultExtension = exts.front();
+      if (!defaultExtension.empty() && base::get_file_extension(filename).empty())
+        filename = base::replace_extension(filename, defaultExtension);
+
+      std::string newfilename;
+      if (!params().ui() ||
+          !aseprite_android_show_save_file_dialog(base::get_file_name(filename),
+                                                  defaultExtension,
+                                                  newfilename)) {
+        return std::string();
+      }
+
+      filename = newfilename;
+#else
       base::paths newfilename;
       if (!params().ui() ||
           !app::show_file_selector(dlgTitle, filename, exts, FileSelectorType::Save, newfilename)) {
@@ -142,6 +192,7 @@ std::string SaveFileBaseCommand::saveAsDialog(Context* context,
       }
 
       filename = newfilename.front();
+#endif
       if (!forbiddenFilename.empty() &&
           base::normalize_path(forbiddenFilename) == base::normalize_path(filename)) {
         ui::Alert::show(Strings::alerts_cannot_file_overwrite_on_export());
@@ -218,8 +269,12 @@ void SaveFileBaseCommand::saveDocumentInBackground(const Context* context,
                                                                   filename,
                                                                   params().filenameFormat(),
                                                                   params().ignoreEmpty()));
-  if (!fop)
+  if (!fop) {
+#if LAF_ANDROID
+    aseprite_android_finish_save_file_dialog(filename, false, false);
+#endif
     return;
+  }
 
   if (!fop->hasError()) {
     if (resizeOnTheFly == ResizeOnTheFly::On)
@@ -250,6 +305,18 @@ void SaveFileBaseCommand::saveDocumentInBackground(const Context* context,
     document->impossibleToBackToSavedState();
   }
   else {
+#if LAF_ANDROID
+    if (!aseprite_android_finish_save_file_dialog(filename,
+                                                  true,
+                                                  markAsSaved == MarkAsSaved::On)) {
+      Console console;
+      console.printf("Error writing file to Android document provider.\n");
+      if (!document->isReadOnly())
+        document->impossibleToBackToSavedState();
+      return;
+    }
+#endif
+
     if (should_add_file_to_recents(context, params()))
       App::instance()->recentFiles()->addRecentFile(filename);
 
@@ -264,6 +331,11 @@ void SaveFileBaseCommand::saveDocumentInBackground(const Context* context,
                                            Strings::save_file_saved(base::get_file_name(filename)));
     }
   }
+
+#if LAF_ANDROID
+  if (fop->hasError() || fop->isStop())
+    aseprite_android_finish_save_file_dialog(filename, false, false);
+#endif
 }
 
 //////////////////////////////////////////////////////////////////////

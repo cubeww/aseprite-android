@@ -49,7 +49,13 @@ std::string getFullOSString()
 
   os << "macOS " << p.osVer.major() << "." << p.osVer.minor() << "." << p.osVer.patch();
 
-#else
+#elif LAF_ANDROID
+
+  os << "Android";
+  if (p.osVer.major() > 0)
+    os << " API " << p.osVer.major();
+
+#elif LAF_LINUX
 
   // ----------------------------------------------------------------------
   // Unix like
@@ -59,6 +65,10 @@ std::string getFullOSString()
     if (!p.distroVer.empty())
       os << " " << p.distroVer;
   }
+
+#else
+
+  os << "Unknown";
 
 #endif
 

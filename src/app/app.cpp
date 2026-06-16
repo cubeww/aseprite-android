@@ -83,7 +83,9 @@
   #include "app/util/decode_webp.h"
 #endif
 
+#include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <iostream>
 #include <memory>
 
@@ -102,6 +104,42 @@
 namespace app {
 
 using namespace ui;
+
+#if LAF_ANDROID
+namespace {
+
+int android_screen_scale_default()
+{
+  const char* value = std::getenv("ASEPRITE_ANDROID_SCREEN_SCALE");
+  if (!value || !*value)
+    return 5;
+
+  char* end = nullptr;
+  const long scale = std::strtol(value, &end, 10);
+  if (end == value)
+    return 5;
+
+  return std::clamp<int>(static_cast<int>(scale), 3, 6);
+}
+
+void apply_android_screen_scale_defaults(Preferences& pref)
+{
+  const int defaultScale = android_screen_scale_default();
+  const int currentScale = pref.general.screenScale();
+  const bool configuredScale = pref.isSet(pref.general.screenScale);
+
+  if (!configuredScale || currentScale == 0) {
+    pref.general.screenScale.setValueAndDefault(defaultScale);
+    LOG("APP: Android screen scale default=%d\n", defaultScale);
+  }
+  else if (currentScale < defaultScale) {
+    pref.general.screenScale(defaultScale);
+    LOG("APP: Raised Android screen scale from %d to %d\n", currentScale, defaultScale);
+  }
+}
+
+} // anonymous namespace
+#endif
 
 #ifdef ENABLE_SCRIPTING
 
@@ -276,6 +314,10 @@ int App::initialize(const AppOptions& options)
   m_coreModules = std::make_unique<CoreModules>();
 
   auto& pref = preferences();
+
+#if LAF_ANDROID
+  apply_android_screen_scale_defaults(pref);
+#endif
 
   os::TabletOptions tabletOptions;
 

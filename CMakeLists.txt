@@ -124,9 +124,15 @@ if(REQUIRE_CURL AND NOT USE_SHARED_CURL)
   endif()
 endif()
 
-# By default we'll try to use Skia back-end
+# By default we'll try to use Skia back-end on desktop platforms. Android
+# support starts with the non-windowed backend until laf-os has a native
+# Android window/Skia implementation.
 if(NOT LAF_BACKEND)
-  set(LAF_BACKEND "skia")
+  if(ANDROID AND NOT SKIA_DIR)
+    set(LAF_BACKEND "none")
+  else()
+    set(LAF_BACKEND "skia")
+  endif()
 endif()
 
 if(ENABLE_DRM AND NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/drm/CMakeLists.txt)
@@ -245,7 +251,7 @@ else()
   set(PNG_FOUND ON)
 
   # Skia on Linux includes libpng symbols
-  if(UNIX AND NOT APPLE AND LAF_BACKEND STREQUAL "skia")
+  if(UNIX AND NOT APPLE AND NOT ANDROID AND LAF_BACKEND STREQUAL "skia")
     set(PNG_LIBRARY skia)
   else()
     set(PNG_LIBRARY png_static)
@@ -369,7 +375,9 @@ if(ENABLE_WEBP)
   if(LAF_BACKEND STREQUAL "skia")
     find_library(WEBP_LIBRARIES webp
       NAMES libwebp # required for Windows
-      PATHS "${SKIA_LIBRARY_DIR}" NO_DEFAULT_PATH)
+      PATHS "${SKIA_LIBRARY_DIR}"
+      NO_DEFAULT_PATH
+      NO_CMAKE_FIND_ROOT_PATH)
     set(WEBP_INCLUDE_DIR "${SKIA_DIR}/third_party/externals/libwebp/src")
     if(WEBP_LIBRARIES)
       set(WEBP_FOUND ON)

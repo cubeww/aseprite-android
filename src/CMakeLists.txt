@@ -73,6 +73,13 @@ endif()
 # ENABLE_UPDATER) or for the app.os object (ENABLE_SCRIPTING).
 add_subdirectory(updater)
 
+if(CMAKE_CROSSCOMPILING AND NOT GEN_EXE)
+  message(FATAL_ERROR
+    "GEN_EXE must point to a host-built gen executable when cross-compiling. "
+    "Build the gen target with the host toolchain first, then re-run CMake "
+    "with -DGEN_EXE=/path/to/gen.")
+endif()
+
 if(GEN_EXE)
   add_executable(gen IMPORTED)
   set_target_properties(gen PROPERTIES IMPORTED_LOCATION ${GEN_EXE})
@@ -92,6 +99,13 @@ if(ENABLE_DESKTOP_INTEGRATION)
 endif()
 
 add_subdirectory(app)
+
+if(ANDROID)
+  option(ENABLE_ANDROID_LIB "Compile the Android JNI shared library" on)
+  if(ENABLE_ANDROID_LIB)
+    add_subdirectory(android)
+  endif()
+endif()
 
 ######################################################################
 # Output bin/data/ directory where we are going to copy data files

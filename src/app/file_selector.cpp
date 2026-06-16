@@ -20,8 +20,15 @@
 #include "os/system.h"
 #include "os/window.h"
 
+#include <cstdlib>
+#include <vector>
+
 #if LAF_LINUX
   #include "os/x11/x11.h"
+#endif
+
+#if LAF_ANDROID
+bool aseprite_android_show_open_file_dialog(bool allowMultiple, std::vector<std::string>& output);
 #endif
 
 namespace app {
@@ -34,6 +41,17 @@ bool show_file_selector(const std::string& title,
 {
   const os::SystemRef system = os::System::instance();
   const std::string defExtension = Preferences::instance().saveFile.defaultExtension();
+
+#if LAF_ANDROID
+  if (type == FileSelectorType::Open || type == FileSelectorType::OpenMultiple) {
+    const bool allowMultiple = (type == FileSelectorType::OpenMultiple);
+    if (aseprite_android_show_open_file_dialog(allowMultiple, output)) {
+      set_current_dir_for_file_selector(base::get_file_path(output[0]));
+      return true;
+    }
+    return false;
+  }
+#endif
 
   if (Preferences::instance().experimental.useNativeFileDialog()) {
     dlgs::FileDialog::Spec spec;
@@ -148,6 +166,23 @@ std::string get_initial_path_to_select_filename(const std::string& initialFilena
 std::string get_current_dir_for_file_selector()
 {
   std::string path = Preferences::instance().fileSelector.currentFolder();
+
+#if LAF_ANDROID
+  const std::string docs = base::get_user_docs_folder();
+  if (path.empty() || path == "<empty>")
+    return docs;
+
+  if (const char* home = std::getenv("HOME")) {
+    std::string current = base::fix_path_separators(path);
+    std::string internal = base::fix_path_separators(home);
+    if (!internal.empty() && current.size() >= internal.size() &&
+        current.compare(0, internal.size(), internal) == 0 &&
+        (current.size() == internal.size() || base::is_path_separator(current[internal.size()]))) {
+      return docs;
+    }
+  }
+#endif
+
   // "<empty>" is the default value for this property, to start from
   // the user docs folder by default.
   if (path == "<empty>") {

@@ -128,7 +128,7 @@ static bool create_main_window(bool gpuAccel, bool& maximized, std::string& last
   const os::SystemRef system = os::System::instance();
   try {
     if (!spec.frame().isEmpty() || !spec.contentRect().isEmpty()) {
-      spec.scale(scale == 0 ? 2 : std::clamp(scale, 1, 4));
+      spec.scale(scale == 0 ? 2 : std::clamp(scale, 1, 6));
       main_window = system->makeWindow(spec);
     }
   }
