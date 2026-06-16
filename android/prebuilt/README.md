@@ -5,7 +5,7 @@ This directory is used for downloaded Android native prebuilts.
 The default Android build script downloads the `arm64-v8a` Skia package from:
 
 ```text
-https://github.com/cubeww/aseprite/releases/download/android-skia-arm64-v1/skia-android-arm64.zip
+https://github.com/cubeww/aseprite-android/releases/download/android-skia-arm64-v1/skia-android-arm64.zip
 ```
 
 It verifies the archive with SHA256:

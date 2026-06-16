@@ -9,7 +9,7 @@ param(
   [string] $LafBackend = "skia",
   [string] $SkiaDir = "",
   [string] $SkiaLibraryDir = "",
-  [string] $SkiaDownloadUrl = "https://github.com/cubeww/aseprite/releases/download/android-skia-arm64-v1/skia-android-arm64.zip",
+  [string] $SkiaDownloadUrl = "https://github.com/cubeww/aseprite-android/releases/download/android-skia-arm64-v1/skia-android-arm64.zip",
   [string] $SkiaArchiveSha256 = "fd3d2763c803e13c2ea5992f693ecc3440a559fe71d39fd92939f298f3792a35",
   [switch] $NoSkiaDownload,
   [switch] $Unsigned

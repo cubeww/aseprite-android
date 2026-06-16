@@ -33,7 +33,7 @@ extracts it into `android/prebuilt/skia-android-arm64`.
 Release asset used by default:
 
 ```text
-https://github.com/cubeww/aseprite/releases/download/android-skia-arm64-v1/skia-android-arm64.zip
+https://github.com/cubeww/aseprite-android/releases/download/android-skia-arm64-v1/skia-android-arm64.zip
 ```
 
 Expected SHA256:
