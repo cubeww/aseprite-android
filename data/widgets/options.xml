@@ -58,6 +58,10 @@
               <listitem text="200%" value="2" />
               <listitem text="300%" value="3" />
               <listitem text="400%" value="4" />
+              <listitem text="500%" value="5" />
+              <listitem text="600%" value="6" />
+              <listitem text="700%" value="7" />
+              <listitem text="800%" value="8" />
             </combobox>
 
             <label text="@.ui_scaling" for="ui_scale" />
@@ -66,6 +70,10 @@
               <listitem text="200%" value="2" />
               <listitem text="300%" value="3" />
               <listitem text="400%" value="4" />
+              <listitem text="500%" value="5" />
+              <listitem text="600%" value="6" />
+              <listitem text="700%" value="7" />
+              <listitem text="800%" value="8" />
             </combobox>
 
             <link text="@.language" url="https://www.aseprite.org/languages/" for="language" />
