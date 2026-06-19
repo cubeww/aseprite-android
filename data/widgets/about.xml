@@ -15,6 +15,10 @@
       <link text="Igara Studio S.A." url="https://igara.com/" />
     </hbox>
     <link text="https://www.aseprite.org/" url="https://www.aseprite.org/" />
+    <link id="android_port_repo"
+          text="Android port: https://github.com/cubeww/aseprite-android"
+          url="https://github.com/cubeww/aseprite-android"
+          visible="false" />
     <hbox>
       <boxfiller />
       <button text="@general.close" closewindow="true" id="ok" magnet="true" minwidth="60" />

@@ -56,6 +56,9 @@ void AboutCommand::onExecute(Context* context)
     window.closeWindow(nullptr);
     App::instance()->mainWindow()->showBrowser("strings/README.md", "Translators");
   });
+#if LAF_ANDROID
+  window.androidPortRepo()->setVisible(true);
+#endif
   window.openWindowInForeground();
 }
 
