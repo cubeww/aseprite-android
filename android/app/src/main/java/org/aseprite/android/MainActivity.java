@@ -67,6 +67,7 @@ public final class MainActivity extends Activity {
   private static final float PINCH_MIN_DISTANCE = 32.0f;
   private static final float PINCH_MIN_MAGNIFICATION = 0.0025f;
   private static final float PINCH_MIN_PAN_DELTA = 3.0f;
+  private static final int THREE_FINGER_TAP_COUNT = 3;
   private static final int REQUEST_OPEN_DOCUMENT = 1001;
   private static final int REQUEST_CREATE_DOCUMENT = 1002;
   private static final String SAVE_TARGET_PREFS = "save-targets";
@@ -105,7 +106,20 @@ public final class MainActivity extends Activity {
   private float lastPinchDistance;
   private float lastPinchCenterX;
   private float lastPinchCenterY;
+  private boolean threeFingerTapGesture;
+  private boolean threeFingerTapMoved;
+  private long threeFingerTapStartTime;
+  private float threeFingerTapCenterX;
+  private float threeFingerTapCenterY;
+  private final int[] threeFingerTapPointerIds = new int[THREE_FINGER_TAP_COUNT];
+  private final float[] threeFingerTapStartX = new float[THREE_FINGER_TAP_COUNT];
+  private final float[] threeFingerTapStartY = new float[THREE_FINGER_TAP_COUNT];
+  private boolean pendingThreeFingerUndo;
+  private long pendingThreeFingerTapTime;
+  private float pendingThreeFingerTapX;
+  private float pendingThreeFingerTapY;
   private final Runnable longPressRunnable = this::handleLongPress;
+  private final Runnable threeFingerUndoRunnable = this::runPendingThreeFingerUndo;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -194,6 +208,8 @@ public final class MainActivity extends Activity {
 
   @Override
   protected void onDestroy() {
+    cancelLongPress();
+    cancelPendingThreeFingerUndo();
     AsepriteBridge.nativeDetachInputView();
     super.onDestroy();
   }
@@ -713,6 +729,7 @@ public final class MainActivity extends Activity {
     switch (action) {
       case MotionEvent.ACTION_DOWN:
         resetPinchState();
+        resetThreeFingerTapState();
         suppressTouchUntilAllUp = false;
         longPressConsumed = false;
         activePointerId = event.getPointerId(0);
@@ -720,13 +737,23 @@ public final class MainActivity extends Activity {
         break;
 
       case MotionEvent.ACTION_POINTER_DOWN:
-        if (!pinching && event.getPointerCount() >= 2 && canStartPinch(event, actionIndex)) {
+        if (threeFingerTapGesture) {
+          threeFingerTapMoved = true;
+        }
+        else if (event.getPointerCount() == THREE_FINGER_TAP_COUNT &&
+            canStartThreeFingerTap(event)) {
+          beginThreeFingerTap(event);
+        }
+        else if (!pinching && event.getPointerCount() >= 2 && canStartPinch(event, actionIndex)) {
           beginPinch(event);
         }
         break;
 
       case MotionEvent.ACTION_MOVE: {
-        if (pinching) {
+        if (threeFingerTapGesture) {
+          updateThreeFingerTap(event);
+        }
+        else if (pinching) {
           sendPinch(event);
         }
         else if (!suppressTouchUntilAllUp) {
@@ -743,7 +770,10 @@ public final class MainActivity extends Activity {
       }
 
       case MotionEvent.ACTION_UP:
-        if (pinching) {
+        if (threeFingerTapGesture) {
+          finishThreeFingerTap(event);
+        }
+        else if (pinching) {
           resetPinchState();
         }
         else if (!longPressConsumed && activePointerId != -1) {
@@ -775,7 +805,10 @@ public final class MainActivity extends Activity {
         break;
 
       case MotionEvent.ACTION_POINTER_UP:
-        if (pinching) {
+        if (threeFingerTapGesture) {
+          finishThreeFingerTap(event);
+        }
+        else if (pinching) {
           int pointerId = event.getPointerId(actionIndex);
           if (pointerId == pinchPointerId1 || pointerId == pinchPointerId2) {
             resetPinchState();
@@ -797,7 +830,10 @@ public final class MainActivity extends Activity {
         break;
 
       case MotionEvent.ACTION_CANCEL:
-        if (pinching) {
+        if (threeFingerTapGesture) {
+          resetThreeFingerTapState();
+        }
+        else if (pinching) {
           resetPinchState();
         }
         else if (activePointerId != -1) {
@@ -829,20 +865,180 @@ public final class MainActivity extends Activity {
     }
   }
 
-  private void beginPinch(MotionEvent event) {
+  private void beginThreeFingerTap(MotionEvent event) {
     cancelLongPress();
-    if (activePointerId != -1) {
-      int pointerIndex = event.findPointerIndex(activePointerId);
-      if (pendingTouchDown) {
-        cancelPendingTouchDown();
-      }
-      else if (activeTouchDownSent && pointerIndex >= 0) {
-        sendPointer(event, pointerIndex, TOUCH_CANCEL, pendingOrEventButton(event));
-      }
+    cancelActivePointerForGesture(event);
+    resetPinchState();
+    resetLastTap();
+
+    suppressTouchUntilAllUp = true;
+    threeFingerTapGesture = true;
+    threeFingerTapMoved = false;
+    threeFingerTapStartTime = event.getEventTime();
+    threeFingerTapCenterX = averageX(event);
+    threeFingerTapCenterY = averageY(event);
+
+    for (int i = 0; i < THREE_FINGER_TAP_COUNT; ++i) {
+      threeFingerTapPointerIds[i] = event.getPointerId(i);
+      threeFingerTapStartX[i] = event.getX(i);
+      threeFingerTapStartY[i] = event.getY(i);
+    }
+  }
+
+  private void cancelActivePointerForGesture(MotionEvent event) {
+    if (activePointerId == -1) {
+      return;
+    }
+
+    int pointerIndex = event.findPointerIndex(activePointerId);
+    if (pendingTouchDown) {
+      cancelPendingTouchDown();
+    }
+    else if (activeTouchDownSent && pointerIndex >= 0) {
+      sendPointer(event, pointerIndex, TOUCH_CANCEL, pendingOrEventButton(event));
     }
 
     activePointerId = -1;
     activeTouchDownSent = false;
+  }
+
+  private boolean canStartThreeFingerTap(MotionEvent event) {
+    if (event.getPointerCount() != THREE_FINGER_TAP_COUNT) {
+      return false;
+    }
+
+    for (int i = 0; i < THREE_FINGER_TAP_COUNT; ++i) {
+      if (pointerTypeFromEvent(event, i) != POINTER_TOUCH) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private void updateThreeFingerTap(MotionEvent event) {
+    if (event.getPointerCount() != THREE_FINGER_TAP_COUNT) {
+      threeFingerTapMoved = true;
+      return;
+    }
+
+    float slopSquared = touchSlop * touchSlop;
+    for (int i = 0; i < THREE_FINGER_TAP_COUNT; ++i) {
+      int pointerIndex = event.findPointerIndex(threeFingerTapPointerIds[i]);
+      if (pointerIndex < 0) {
+        threeFingerTapMoved = true;
+        return;
+      }
+
+      float dx = event.getX(pointerIndex) - threeFingerTapStartX[i];
+      float dy = event.getY(pointerIndex) - threeFingerTapStartY[i];
+      if (dx * dx + dy * dy > slopSquared) {
+        threeFingerTapMoved = true;
+        return;
+      }
+    }
+  }
+
+  private void finishThreeFingerTap(MotionEvent event) {
+    if (!threeFingerTapMoved &&
+        event.getEventTime() - threeFingerTapStartTime <= ViewConfiguration.getLongPressTimeout()) {
+      handleThreeFingerTap(event.getEventTime(), threeFingerTapCenterX, threeFingerTapCenterY);
+    }
+
+    resetThreeFingerTapState();
+    suppressTouchUntilAllUp = true;
+  }
+
+  private void handleThreeFingerTap(long eventTime, float x, float y) {
+    if (pendingThreeFingerUndo && isPendingThreeFingerDoubleTap(eventTime, x, y)) {
+      cancelPendingThreeFingerUndo();
+      sendShortcut(KeyEvent.KEYCODE_Y);
+      return;
+    }
+
+    if (pendingThreeFingerUndo) {
+      cancelPendingThreeFingerUndo();
+      sendShortcut(KeyEvent.KEYCODE_Z);
+    }
+
+    scheduleThreeFingerUndo(eventTime, x, y);
+  }
+
+  private void scheduleThreeFingerUndo(long eventTime, float x, float y) {
+    pendingThreeFingerUndo = true;
+    pendingThreeFingerTapTime = eventTime;
+    pendingThreeFingerTapX = x;
+    pendingThreeFingerTapY = y;
+
+    if (surfaceView != null) {
+      surfaceView.removeCallbacks(threeFingerUndoRunnable);
+      surfaceView.postDelayed(threeFingerUndoRunnable, ViewConfiguration.getDoubleTapTimeout());
+    }
+  }
+
+  private boolean isPendingThreeFingerDoubleTap(long eventTime, float x, float y) {
+    long elapsed = eventTime - pendingThreeFingerTapTime;
+    if (elapsed < 0 || elapsed > ViewConfiguration.getDoubleTapTimeout()) {
+      return false;
+    }
+
+    float dx = x - pendingThreeFingerTapX;
+    float dy = y - pendingThreeFingerTapY;
+    return dx * dx + dy * dy <= doubleTapSlop * doubleTapSlop;
+  }
+
+  private void runPendingThreeFingerUndo() {
+    if (!pendingThreeFingerUndo) {
+      return;
+    }
+
+    pendingThreeFingerUndo = false;
+    sendShortcut(KeyEvent.KEYCODE_Z);
+  }
+
+  private void cancelPendingThreeFingerUndo() {
+    pendingThreeFingerUndo = false;
+    if (surfaceView != null) {
+      surfaceView.removeCallbacks(threeFingerUndoRunnable);
+    }
+  }
+
+  private void sendShortcut(int keyCode) {
+    AsepriteBridge.nativeOnKey(TOUCH_DOWN, keyCode, 0, KeyEvent.META_CTRL_ON);
+    AsepriteBridge.nativeOnKey(TOUCH_UP, keyCode, 0, KeyEvent.META_CTRL_ON);
+  }
+
+  private float averageX(MotionEvent event) {
+    float sum = 0.0f;
+    for (int i = 0; i < THREE_FINGER_TAP_COUNT; ++i) {
+      sum += event.getX(i);
+    }
+    return sum / THREE_FINGER_TAP_COUNT;
+  }
+
+  private float averageY(MotionEvent event) {
+    float sum = 0.0f;
+    for (int i = 0; i < THREE_FINGER_TAP_COUNT; ++i) {
+      sum += event.getY(i);
+    }
+    return sum / THREE_FINGER_TAP_COUNT;
+  }
+
+  private void resetThreeFingerTapState() {
+    threeFingerTapGesture = false;
+    threeFingerTapMoved = false;
+    threeFingerTapStartTime = 0;
+    threeFingerTapCenterX = 0.0f;
+    threeFingerTapCenterY = 0.0f;
+    for (int i = 0; i < THREE_FINGER_TAP_COUNT; ++i) {
+      threeFingerTapPointerIds[i] = -1;
+      threeFingerTapStartX[i] = 0.0f;
+      threeFingerTapStartY[i] = 0.0f;
+    }
+  }
+
+  private void beginPinch(MotionEvent event) {
+    cancelLongPress();
+    cancelActivePointerForGesture(event);
     suppressTouchUntilAllUp = true;
     pinching = true;
     pinchPointerId1 = event.getPointerId(0);
